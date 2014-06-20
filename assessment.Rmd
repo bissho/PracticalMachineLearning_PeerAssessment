@@ -1,0 +1,88 @@
+Prediction Assignment
+========================================================
+
+The goal of the project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We may use any of the other variables to predict with. We should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+# Data analisis
+
+## Data load
+
+First I downloaded from 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv (2014/06/20 18:04) and loaded in R:
+```{r}
+trainSet=read.csv("data/pml-training.csv")
+```
+
+## Selection of predictors
+
+I did a preliminary study in order to reduce the number of predictor(my machine is a Pentium M with Lubuntu (Light Ubuntu)):
+
+-1. First I reduced to columns without lots of NAs or invalid values using summary function. 
+
+```{r results='hide'}
+dim(trainSet)
+names(trainSet)
+str(trainSet)
+summary(trainSet)
+inUse=c("roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x"  ,"accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y" ,"magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")
+trainSet=trainSet[,c(inUse,"classe")]
+```
+
+-2. Then I created a matriz of correlation between columns except themselves and outcome in order to keep only one column from groups of correlated ones. 
+
+```{r}
+M <- abs(cor(trainSet[,-51]))
+diag(M) <- 0
+which(M > 0.7,arr.ind=T)
+reducedTrainSet=trainSet[,-c(3,4,8,9,10,11,12,14,20,23,24,32,33,34,35,36,43,44,49)]
+```
+
+## Predictor method
+
+First I chose the *tree method* (rpart) as I supossed that it was simple and could be enough with this lot of covariates, but as can be seen it was not enough even inside the training set:
+
+```{r rpartCache, cache=TRUE}
+library(caret)
+set.seed(123232)
+modFit <- train(classe ~ .,method="rpart",data=reducedTrainSet)
+predictions <- predict(modFit,newdata=trainSet)
+confusionMatrix(predictions,trainSet$classe)
+```
+
+Then I tried with one that had inside cross validation: *Random forests*. It took more that 2 hours to run in my laptop but as you can see it did perfect inside training set. The random forest method is a combination of tree predictors such that each tree depends on the values of a random vector and independently tested with the same layout for each of these. It is a substantial modification of bagging that builds a long collection of uncorrelated trees and then averages them.
+
+```{r rfCache, cache=TRUE}
+library(caret)
+set.seed(123232)
+#modFit <- train(classe ~ .,method="rf",data=reducedTrainSet)
+#predictions <- predict(modFit,newdata=trainSet)
+#confusionMatrix(predictions,trainSet$classe)
+```
+
+## Test data prediction
+
+I download the testing data from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv (2014/06/14 18:04) and loaded in R.
+
+```{r}
+#Test predictions
+testingSet=read.csv("data/pml-testing.csv")
+```
+
+Then prepared the predicted outcome files as specified in the course with a total score of 20/20.
+
+```{r}
+predictionsTest <- predict(modFit,newdata=testingSet)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+#Only run one time
+#pml_write_files(predictionsTest)
+```
+
+## Other thoughts:
+
+I have not tried regression or other linear models because I don't think that they are fitted in this case as the outcome is not continuous and the order of the values A..E of the outcome has no meaning. This is why I have jumped directly to classification trees.
